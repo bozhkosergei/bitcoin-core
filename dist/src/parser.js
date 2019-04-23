@@ -1,47 +1,33 @@
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
-
-var _jsonBigint = _interopRequireDefault(require("json-bigint"));
-
-var _rpcError = _interopRequireDefault(require("./errors/rpc-error"));
-
-var _lodash = _interopRequireDefault(require("lodash"));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 /**
  * Module dependencies.
  */
 
+import JSONBigInt from 'json-bigint';
+import RpcError from './errors/rpc-error';
+import _ from 'lodash';
+
 /**
  * JSONBigInt parser.
  */
-const {
-  parse
-} = (0, _jsonBigint.default)({
-  storeAsString: true,
-  strict: true
-}); // eslint-disable-line new-cap
+
+const { parse } = JSONBigInt({ storeAsString: true, strict: true }); // eslint-disable-line new-cap
 
 /**
  * Get RPC response body result.
  */
 
-function getRpcResult(body, {
-  headers = false,
-  response
-} = {}) {
+function getRpcResult(body, { headers = false, response } = {}) {
   if (body.error !== null) {
-    throw new _rpcError.default(_lodash.default.get(body, 'error.code', -32603), _lodash.default.get(body, 'error.message', 'An error occurred while processing the RPC call to bitcoind'));
-  } // Defensive measure. This should not happen on a RPC call.
+    throw new RpcError(
+      _.get(body, 'error.code', -32603),
+      _.get(body, 'error.message', 'An error occurred while processing the RPC call to bitcoind')
+    );
+  }
 
-
-  if (!_lodash.default.has(body, 'result')) {
-    throw new _rpcError.default(-32700, 'Missing `result` on the RPC call result');
+  // Defensive measure. This should not happen on a RPC call.
+  if (!_.has(body, 'result')) {
+    throw new RpcError(-32700, 'Missing `result` on the RPC call result');
   }
 
   if (headers) {
@@ -50,48 +36,38 @@ function getRpcResult(body, {
 
   return body.result;
 }
+
 /**
  * Export Parser class.
  */
 
-
-class Parser {
-  constructor({
-    headers
-  } = {}) {
+export default class Parser {
+  constructor({ headers } = {}) {
     this.headers = headers;
   }
+
   /**
    * Parse rpc response.
    */
-
 
   rpc([response, body]) {
     // The RPC api returns a `text/html; charset=ISO-8859-1` encoded response with an empty string as the body
     // when an error occurs.
     if (typeof body === 'string' && response.headers['content-type'] !== 'application/json' && response.statusCode !== 200) {
-      throw new _rpcError.default(response.statusCode, response.statusMessage, {
-        body
-      });
-    } // Parsing the body with custom parser to support BigNumbers.
+      throw new RpcError(response.statusCode, response.statusMessage, { body });
+    }
 
-
+    // Parsing the body with custom parser to support BigNumbers.
     body = parse(body);
 
     if (!Array.isArray(body)) {
-      return getRpcResult(body, {
-        headers: this.headers,
-        response
-      });
-    } // Batch response parsing where each response may or may not be successful.
+      return getRpcResult(body, { headers: this.headers, response });
+    }
 
-
+    // Batch response parsing where each response may or may not be successful.
     const batch = body.map(response => {
       try {
-        return getRpcResult(response, {
-          headers: false,
-          response
-        });
+        return getRpcResult(response, { headers: false, response });
       } catch (e) {
         return e;
       }
@@ -114,12 +90,10 @@ class Parser {
         body = body.toString('utf-8');
       }
 
-      throw new _rpcError.default(response.statusCode, body.replace('\r\n', ''), {
-        body
-      });
-    } // Parsing the body with custom parser to support BigNumbers.
+      throw new RpcError(response.statusCode, body.replace('\r\n', ''), { body });
+    }
 
-
+    // Parsing the body with custom parser to support BigNumbers.
     if (extension === 'json') {
       body = parse(body);
     }
@@ -130,7 +104,4 @@ class Parser {
 
     return body;
   }
-
 }
-
-exports.default = Parser;
